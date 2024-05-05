@@ -1,10 +1,10 @@
 #!/bin/bash
 
 data_directory="data"
-train_directory="${data_directory}/train"
+train_directory="train"
 
 # download the data if necessary
-if [ -d "$train_directory" ]; then
+if [ -d "${data_directory}/train" ]; then
   echo "Data already downloaded."
 # extract the data
 else
