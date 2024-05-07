@@ -41,7 +41,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         image = self.images[i]
         # if no mask use dummy mask
         mask = (
-            np.where(self.masks[i] >= 0.5, 1, 0).astype(np.uint8)
+            np.where(self.masks[i] > 0, 1, 0).astype(np.uint8)
             if self.masks
             else np.zeros(image.shape)
         )
@@ -54,7 +54,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         # apply preprocessing to adjust to encoder
         if self.preprocess:
-            sample = self.preprocess(image=image, mask=mask)
+            sample = self.preprocess(image, mask)
             image, mask = sample["image"], sample["mask"]
 
         # convert to Pytorch format HWC -> CHW
@@ -65,6 +65,26 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.images)
+
+    def to_tensor(self, x):
+        return x.transpose(2, 0, 1).astype('float32')
+
+    def get_preprocessing(self, preprocessing_fn):
+        """Construct preprocessing transform
+
+        Args:
+            preprocessing_fn (callbale): data normalization function
+                (can be specific for each pretrained neural network)
+        Return:
+            transform: albumentations.Compose
+
+        """
+
+        _transform = [
+            A.Lambda(image=preprocessing_fn),
+            A.Lambda(image=self.to_tensor, mask=self.to_tensor),
+        ]
+        return A.Compose(_transform)
 
 
 @torch.no_grad()
