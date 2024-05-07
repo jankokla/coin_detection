@@ -47,6 +47,8 @@ class ClassificationDataset(torch.utils.data.Dataset):
         image = mpimg.imread(filepath)
         label = self.labels[filepath.split('/')[-1]]
 
+        radius = np.mean(image.shape[:2]) / 2
+
         if self.transform:
             # apply same transformation to image and mask
             # NB! This must be done before converting to Pytorch format
@@ -61,7 +63,9 @@ class ClassificationDataset(torch.utils.data.Dataset):
         # convert to Pytorch format HWC -> CHW
         image = np.moveaxis(image, -1, 0)
 
-        return torch.tensor(image), torch.tensor(label)
+        return (torch.tensor(image),
+                torch.tensor(label),
+                torch.tensor(radius, dtype=torch.float32))
 
     def __len__(self):
         return len(self.image_paths)
