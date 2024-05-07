@@ -5,6 +5,88 @@ from skimage import io, transform, color, filters
 from skimage.color import rgb2hsv
 import cv2 as cv
 from sklearn.metrics import pairwise_distances
+from skimage.morphology import disk, closing, opening
+from skimage.morphology import remove_small_holes, remove_small_objects
+
+
+def remove_holes(img_th, size):
+    """
+    Remove holes from input image that are smaller than size argument.
+
+    Args
+    ----
+    img_th: np.ndarray (M, N)
+        Image mask of size MxN.
+    size: int
+        Minimal size of holes
+
+    Return
+    ------
+    img_holes: np.ndarray (M, N)
+        Image after remove holes operation
+    """
+    return remove_small_holes(img_th, size)
+
+
+def remove_objects(img_th, size):
+    """
+    Remove objects from input image that are smaller than size argument.
+
+    Args
+    ----
+    img_th: np.ndarray (M, N)
+        Image mask of size MxN.
+    size: int
+        Minimal size of objects
+
+    Return
+    ------
+    img_obj: np.ndarray (M, N)
+        Image after remove small objects operation
+    """
+    return remove_small_objects(img_th, size)
+
+
+def apply_closing(img_th, disk_size):
+    """
+    Apply closing to input mask image using disk shape.
+
+    Args
+    ----
+    img_th: np.ndarray (M, N)
+        Image mask of size MxN.
+    disk_size: int
+        Size of the disk to use for closing
+
+    Return
+    ------
+    img_closing: np.ndarray (M, N)
+        Image after closing operation
+    """
+    footprint = disk(disk_size)
+
+    return closing(img_th, footprint)
+
+
+def apply_opening(img_th, disk_size):
+    """
+    Apply opening to input mask image using disk shape.
+
+    Args
+    ----
+    img_th: np.ndarray (M, N)
+        Image mask of size MxN.
+    disk_size: int
+        Size of the disk to use for opening
+
+    Return
+    ------
+    img_opening: np.ndarray (M, N)
+        Image after opening operation
+    """
+    footprint = disk(disk_size)
+
+    return opening(img_th, footprint)
 
 
 def read_image(
