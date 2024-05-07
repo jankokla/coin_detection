@@ -10406,82 +10406,82 @@
   "categories": [
     {
       "supercategory": "Coin Type",
-      "id": 1,
+      "id": 0,
       "name": "5CHF"
     },
     {
       "supercategory": "Coin Type",
-      "id": 2,
+      "id": 1,
       "name": "2CHF"
     },
     {
       "supercategory": "Coin Type",
-      "id": 3,
+      "id": 2,
       "name": "1CHF"
     },
     {
       "supercategory": "Coin Type",
-      "id": 4,
+      "id": 3,
       "name": "0.5CHF"
     },
     {
       "supercategory": "Coin Type",
-      "id": 5,
+      "id": 4,
       "name": "0.2CHF"
     },
     {
       "supercategory": "Coin Type",
-      "id": 6,
+      "id": 5,
       "name": "0.1CHF"
     },
     {
       "supercategory": "Coin Type",
-      "id": 7,
+      "id": 6,
       "name": "0.05CHF"
     },
     {
       "supercategory": "Coin Type",
-      "id": 8,
+      "id": 7,
       "name": "2EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 9,
+      "id": 8,
       "name": "1EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 10,
+      "id": 9,
       "name": "0.5EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 11,
+      "id": 10,
       "name": "0.2EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 12,
+      "id": 11,
       "name": "0.1EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 13,
+      "id": 12,
       "name": "0.05EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 14,
+      "id": 13,
       "name": "0.02EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 15,
+      "id": 14,
       "name": "0.01EUR"
     },
     {
       "supercategory": "Coin Type",
-      "id": 16,
+      "id": 15,
       "name": "OOD"
     }
   ]

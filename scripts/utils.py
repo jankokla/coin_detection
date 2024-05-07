@@ -1,15 +1,70 @@
+import json
 import os
 from functools import partial
-from typing import List
+from typing import List, Tuple
 
 import numpy as np
 import torch.utils.data
+from PIL import Image
 from matplotlib import image as mpimg
 import albumentations as A
 from sklearn.metrics import pairwise_distances
 from sklearn.model_selection import train_test_split
 
 from scripts.training import get_best_available_device
+
+
+class ClassificationDataset(torch.utils.data.Dataset):
+    """
+    Dataset class for segmentation.
+
+    Args:
+        image_paths (List[str]): list of full paths to images
+        mask_paths (List[str]): list of full paths to masks
+        transform (A.Compose): custom transformations from Albumentations
+        preprocess (partial): encoder-specific transforms callable
+    """
+
+    def __init__(
+            self,
+            image_paths: List[str],
+            labels_path: str = None,
+            transform: A.Compose = None,
+            preprocess: partial = None
+    ):
+
+        self.image_paths = image_paths
+
+        with open(labels_path, 'r') as file:
+            self.labels = json.load(file)
+
+        self.transform = transform
+        self.preprocess = preprocess
+
+    def __getitem__(self, i):
+
+        filepath = self.image_paths[i]
+        image = mpimg.imread(filepath)
+        label = self.labels[filepath.split('/')[-1]]
+
+        if self.transform:
+            # apply same transformation to image and mask
+            # NB! This must be done before converting to Pytorch format
+            transformed = self.transform(image=image)
+            image = transformed["image"]
+
+        # apply preprocessing to adjust to encoder
+        if self.preprocess:
+            sample = self.preprocess(image)
+            image = sample["image"]
+
+        # convert to Pytorch format HWC -> CHW
+        image = np.moveaxis(image, -1, 0)
+
+        return torch.tensor(image), torch.tensor(label)
+
+    def __len__(self):
+        return len(self.image_paths)
 
 
 class SegmentationDataset(torch.utils.data.Dataset):
@@ -67,31 +122,11 @@ class SegmentationDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.images)
 
-    def to_tensor(self, x):
-        return x.transpose(2, 0, 1).astype('float32')
-
-    def get_preprocessing(self, preprocessing_fn):
-        """Construct preprocessing transform
-
-        Args:
-            preprocessing_fn (callbale): data normalization function
-                (can be specific for each pretrained neural network)
-        Return:
-            transform: albumentations.Compose
-
-        """
-
-        _transform = [
-            A.Lambda(image=preprocessing_fn),
-            A.Lambda(image=self.to_tensor, mask=self.to_tensor),
-        ]
-        return A.Compose(_transform)
-
 
 @torch.no_grad()
 def get_prediction(model, image) -> np.ndarray:
     """
-    Return prediction for the specific image.
+    Return segmentation prediction for the specific image.
 
     :param model: used for inference
     :param image: torch.Tensor
@@ -105,19 +140,7 @@ def get_prediction(model, image) -> np.ndarray:
     return np.where(prediction_sigmoid >= 0.5, 1, 0)
 
 
-def split_data(images_path: str, test_size: float):
-    """
-
-    Args:
-        images_path (str): absolute path of the parent directory of images
-        test_size (float): from range [0, 1]
-
-    Returns:
-        image_path_train (List[str])
-        image_path_test (List[str])
-        mask_path_train (List[str])
-        mask_path_test (List[str])
-    """
+def _get_paths_segmentation(images_path: str) -> Tuple[list, list]:
     # specify image and ground truth full path
     image_directory = os.path.join(images_path, "images")
     labels_directory = os.path.join(images_path, "masks")
@@ -132,9 +155,45 @@ def split_data(images_path: str, test_size: float):
         for image in sorted(os.listdir(labels_directory))
     ]
 
+    return image_paths, mask_paths
+
+
+def _get_paths_classification(images_path: str) -> Tuple[list, None]:
+    # List to hold file names
+    image_paths = []
+
+    for file in os.listdir(images_path):
+        if file.endswith('.jpg'):
+            image_paths.append(os.path.join(images_path, file))
+
+    return image_paths, None
+
+
+def split_data(images_path: str, test_size: float, type: str):
+    """
+
+    Args:
+        images_path (str): absolute or relative path of the img directory
+        test_size (float): from range [0, 1]
+        type (str): either "segmentation" or "classification"
+
+    Returns:
+        image_path_train (List[str])
+        image_path_test (List[str])
+        mask_path_train (List[str])
+        mask_path_test (List[str])
+    """
+    if type == 'segmentation':
+        image_paths, mask_paths = _get_paths_segmentation(images_path)
+    else:
+        image_paths, mask_paths =_get_paths_classification(images_path)
+
     # All images in train set, none in test
     if test_size == 0:
         return image_paths, [], mask_paths, []
+    elif type == 'classification':
+        train, test = train_test_split(image_paths, test_size=test_size)
+        return train, test, None, None
     else:
         return train_test_split(image_paths, mask_paths, test_size=test_size)
 
@@ -185,3 +244,51 @@ def filter_circles(hough_output: np.ndarray) -> np.ndarray:
         keep[overlapping & (radii[i] >= radii)] = False
 
     return hough_output[keep]
+
+
+def get_images_from_coco(images_path, annotation_json) -> None:
+
+    # if data already downloaded -> no need for action
+    if len(os.listdir('data/classification')) != 0:
+        print('Files already there, good to go!')
+        return
+
+    # load the json file
+    with open(annotation_json, 'r') as file:
+        data = json.load(file)
+
+    # map image id to file name
+    annotations = data['annotations']
+    images = {img['id']: img['file_name'] for img in data['images']}
+
+    # create the output list
+    labels = {}
+
+    # get the annotations
+    for ann in annotations:
+        image_id = ann['image_id']
+        filename = images.get(image_id)
+
+        image_path = os.path.join(images_path, filename)
+        image = Image.open(image_path)
+
+        # get the bounding box
+        x_min, y_min, width, height = ann['bbox']
+
+        # calculate the bounding box coordinates
+        left, right = int(x_min), int(x_min + width)
+        top, bottom = int(y_min), int(y_min + height)
+
+        # crop the image
+        cropped_image = image.crop((left, top, right, bottom))
+
+        # save the cropped image
+        cropped_name = f"{filename.rsplit('.', 1)[0]}_cropped_{ann['id']}.jpg"
+        cropped_image.save(os.path.join('data/classification', cropped_name))
+
+        labels[cropped_name] = ann['category_id']
+
+    with open("data/classification/labels.json", "w") as outfile:
+        json.dump(labels, outfile)
+
+

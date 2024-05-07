@@ -5,6 +5,8 @@ import segmentation_models_pytorch as smp
 
 import numpy as np
 import torch
+from torch.nn import CrossEntropyLoss
+from torcheval.metrics.functional import multiclass_f1_score as f1_eval
 from tqdm import tqdm
 
 
@@ -63,6 +65,8 @@ def train_epoch(
     :return: average loss, average f1 score
     """
 
+    is_cls = isinstance(criterion, CrossEntropyLoss)
+
     device = get_best_available_device()
     model.train()
 
@@ -77,15 +81,21 @@ def train_epoch(
 
         # forward + backward + optimize
         logits = model(inputs.float())
-        loss = criterion(logits, labels.float())
+
+        loss = criterion(logits, labels) if is_cls else criterion(logits, labels.float())
+
         loss.backward()
         optimizer.step()
         scheduler.step()
 
-        tp, fp, fn, tn = smp.metrics.get_stats(
-            logits.sigmoid(), labels, mode="binary", threshold=0.5
-        )
-        f1_score = smp.metrics.f1_score(tp, fp, fn, tn, reduction="micro-imagewise")
+        if is_cls:
+            pred_labels = logits.argmax(dim=-1)
+            f1_score = f1_eval(pred_labels, labels, num_classes=16, average="micro")
+        else:
+            tp, fp, fn, tn = smp.metrics.get_stats(
+                logits.sigmoid(), labels, mode="binary", threshold=0.5
+            )
+            f1_score = smp.metrics.f1_score(tp, fp, fn, tn, reduction="micro-imagewise")
 
         metric_monitor.update("Loss", loss.item())
         metric_monitor.update("f1", f1_score.item())
@@ -111,6 +121,8 @@ def valid_epoch(model, dataloader, criterion, epoch) -> (float, float):
     :param epoch: current epoch
     :return: average loss, average f1 score
     """
+    is_cls = isinstance(criterion, CrossEntropyLoss)
+
     device = get_best_available_device()
     model.eval()
 
@@ -125,13 +137,20 @@ def valid_epoch(model, dataloader, criterion, epoch) -> (float, float):
         # predict
         logits = model(inputs.float())
 
-        # calculate metrics
-        loss = criterion(logits, labels.float())
+        if is_cls:
+            loss = criterion(logits, labels)
 
-        tp, fp, fn, tn = smp.metrics.get_stats(
-            logits.sigmoid(), labels, mode="binary", threshold=0.4
-        )
-        f1_score = smp.metrics.f1_score(tp, fp, fn, tn, reduction="micro-imagewise")
+            pred_labels = torch.argmax(logits, dim=-1)
+            f1_score = f1_eval(pred_labels, labels, num_classes=17, average="micro")
+
+        else:
+            # calculate metrics
+            loss = criterion(logits, labels.float())
+
+            tp, fp, fn, tn = smp.metrics.get_stats(
+                logits.sigmoid(), labels, mode="binary", threshold=0.4
+            )
+            f1_score = smp.metrics.f1_score(tp, fp, fn, tn, reduction="micro-imagewise")
 
         metric_monitor.update("Loss", loss.item())
         metric_monitor.update("f1", f1_score.item())
