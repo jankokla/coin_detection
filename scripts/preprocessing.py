@@ -339,6 +339,40 @@ def apply_sobel(image: np.ndarray) -> np.ndarray:
     sobel = filters.sobel(grayscale)
     return (sobel * 255).astype(np.uint8)
 
+def get_hough_circles(
+        image: np.ndarray,
+        plot_image: np.ndarray,
+        is_filter: bool = True,
+        param_1: int = 200,
+        param_2: int = 30,
+        min_radius: int = 18,
+        max_radius: int = 55
+):
+    """
+    Return Transformed circles without image
+
+    Args:
+        image (np.ndarray): with shape (H, W, C)
+        plot_image (np.ndarray): with shape (H, W, C)
+        is_filter (bool): if filtering of circles is applied
+        param_1 (int): upper threshold
+        param_2 (int): lower threshold
+        min_radius (int): of Hough circle
+        max_radius (int): of Hough circle
+
+    Returns:
+        hough_circles (List): List of Hough circles
+    """
+    circles = cv.HoughCircles(
+        image, cv.HOUGH_GRADIENT, 1, 20, param1=param_1,
+        param2=param_2, minRadius=min_radius, maxRadius=max_radius
+    )
+    if is_filter:
+        circles = filter_circles(circles)
+    else:
+        circles = np.uint16(np.around(circles))[0, :]
+
+    return circles
 
 def apply_hough(
         image: np.ndarray,
