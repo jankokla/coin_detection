@@ -374,6 +374,14 @@ def get_hough_circles(
 
     return circles
 
+def scale_hough_circles(hough_circles, ratio, max_width, max_height):
+
+    scaled_circles = (hough_circles * ratio).astype(int)
+    scaled_circles[scaled_circles[:,0] + scaled_circles[:,2] > max_width ] = max_width
+    scaled_circles[scaled_circles[:,1] + scaled_circles[:,2] > max_height ] = max_height
+
+    return scaled_circles
+
 def apply_hough(
         image: np.ndarray,
         plot_image: np.ndarray,
