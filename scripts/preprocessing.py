@@ -5,11 +5,23 @@ from skimage import io, transform, color, filters
 from skimage.color import rgb2hsv
 import cv2 as cv
 from sklearn.metrics import pairwise_distances
-from skimage.morphology import disk, closing, opening
+from skimage.morphology import disk, closing, opening, black_tophat, white_tophat, erosion, dilation
 from skimage.morphology import remove_small_holes, remove_small_objects
 
+def apply_operation(img, operation_list, operation_dict):
 
-def remove_holes(img_th, size):
+    output_list = []
+
+    input_img = np.copy(img)
+
+    for operation in operation_list:
+        output_img = np.copy(operation_dict[operation](input_img))
+        output_list.append(output_img)
+        input_img = np.copy(output_img)
+    
+    return output_list
+
+def remove_holes(img_th, size=15):
     """
     Remove holes from input image that are smaller than size argument.
 
@@ -46,6 +58,77 @@ def remove_objects(img_th, size):
     """
     return remove_small_objects(img_th, size)
 
+def apply_black_tophat(img, disk_size=15):
+
+    footprint = disk(disk_size)
+
+    img_blackth = np.zeros_like(img)
+
+    for channel in range(img.shape[2]):
+        img_blackth[:,:,channel] = black_tophat(img[:,:,channel], footprint)
+
+    return img_blackth
+
+def apply_white_tophat(img, disk_size=15):
+
+    footprint = disk(disk_size)
+
+    img_whiteth = np.zeros_like(img)
+
+    for channel in range(img.shape[2]):
+        img_whiteth[:,:,channel] = white_tophat(img[:,:,channel], footprint)
+
+    return img_whiteth
+
+def apply_dilation(img, disk_size=15):
+    """
+    Apply dilation to input mask image using disk shape.
+
+    Args
+    ----
+    img_th: np.ndarray (M, N, C)
+        Image mask of size MxNxC.
+    disk_size: int
+        Size of the disk to use for dilation
+
+    Return
+    ------
+    img_closing: np.ndarray (M, N, C)
+        Image after dilation operation
+    """
+    footprint = disk(disk_size)
+
+    img_dilation = np.zeros_like(img)
+
+    for channel in range(img.shape[2]):
+        img_dilation[:,:,channel] = dilation(img[:,:,channel], footprint)
+
+    return img_dilation
+
+def apply_erosion(img, disk_size=15):
+    """
+    Apply erosion to input mask image using disk shape.
+
+    Args
+    ----
+    img_th: np.ndarray (M, N, C)
+        Image mask of size MxNxC.
+    disk_size: int
+        Size of the disk to use for erosion
+
+    Return
+    ------
+    img_closing: np.ndarray (M, N, C)
+        Image after erosion operation
+    """
+    footprint = disk(disk_size)
+
+    img_erosion = np.zeros_like(img)
+
+    for channel in range(img.shape[2]):
+        img_erosion[:,:,channel] = erosion(img[:,:,channel], footprint)
+
+    return img_erosion
 
 def apply_closing(img_th, disk_size):
     """
@@ -68,25 +151,30 @@ def apply_closing(img_th, disk_size):
     return closing(img_th, footprint)
 
 
-def apply_opening(img_th, disk_size):
+def apply_opening(img_th, disk_size=15):
     """
-    Apply opening to input mask image using disk shape.
+    Apply opening to input mask image using disk shape ON EACH CHANNEL
 
     Args
     ----
-    img_th: np.ndarray (M, N)
-        Image mask of size MxN.
+    img_th: np.ndarray (M, N, C)
+        Image mask of size MxNxC.
     disk_size: int
         Size of the disk to use for opening
 
     Return
     ------
-    img_opening: np.ndarray (M, N)
+    img_opening: np.ndarray (M, N, C)
         Image after opening operation
     """
-    footprint = disk(disk_size)
 
-    return opening(img_th, footprint)
+    footprint = disk(disk_size)
+    img_open = np.zeros_like(img_th)
+
+    for channel in range(img_th.shape[2]):
+        img_open[:,:,channel] = opening(img_th[:,:,channel], footprint)
+
+    return img_open
 
 
 def read_image(
@@ -283,37 +371,42 @@ def filter_circles(hough_output: np.ndarray) -> np.ndarray:
     Returns:
         filtered_output (np.ndarray): with shape (K, 3)
     """
-    # if shape is not (N, 3) make it so
-    if len(hough_output.shape) != 2:
-        hough_output = hough_output.squeeze(0)
+    # Check for None
+    if hough_output is not None:
+        # if shape is not (N, 3) make it so
+        if len(hough_output.shape) != 2:
+            hough_output = hough_output.squeeze(0)
 
-    # make sure you have uint16 as dtype for cropping and plotting
-    if hough_output.dtype != np.dtype('uint16'):
-        hough_output = np.uint16(np.around(hough_output))
+        # make sure you have uint16 as dtype for cropping and plotting
+        if hough_output.dtype != np.dtype('uint16'):
+            hough_output = np.uint16(np.around(hough_output))
 
-    # extract centers and radii
-    centers, radii = hough_output[:, :2], hough_output[:, 2]
+        # extract centers and radii
+        centers, radii = hough_output[:, :2], hough_output[:, 2]
 
-    distances = pairwise_distances(centers[:, :2])
+        distances = pairwise_distances(centers[:, :2])
 
-    # get call the overlapping circles and clean bottom half
-    is_inside = distances < radii
-    is_inside[np.tril_indices(len(is_inside), 0)] = False
+        # get call the overlapping circles and clean bottom half
+        is_inside = distances < radii
+        is_inside[np.tril_indices(len(is_inside), 0)] = False
 
-    # iterate over indices to find what to keep
-    keep = np.full(len(hough_output), True)
-    for i in range(len(hough_output)):
+        # iterate over indices to find what to keep
+        keep = np.full(len(hough_output), True)
+        for i in range(len(hough_output)):
 
-        if not keep[i]:
-            continue
+            if not keep[i]:
+                continue
 
-        # find all circles where i's center is inside and i is not the largest
-        overlapping = is_inside[:, i]
-        larger = radii[i] > radii[overlapping]
-        if not all(larger):
-            keep[i] = False
+            # find all circles where i's center is inside and i is not the largest
+            overlapping = is_inside[:, i]
+            larger = radii[i] > radii[overlapping]
+            if not all(larger):
+                keep[i] = False
 
-        # keep only the biggest circle
-        keep[overlapping & (radii[i] >= radii)] = False
+            # keep only the biggest circle
+            keep[overlapping & (radii[i] >= radii)] = False
 
-    return hough_output[keep]
+        return hough_output[keep]
+    
+    else:
+        return np.full(shape=(1,3), fill_value=1)
