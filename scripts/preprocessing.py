@@ -1,12 +1,14 @@
 
 import numpy as np
 import PIL
+from typing import List
 from skimage import io, transform, color, filters
 from skimage.color import rgb2hsv
 import cv2 as cv
 from sklearn.metrics import pairwise_distances
 from skimage.morphology import disk, closing, opening, black_tophat, white_tophat, erosion, dilation
 from skimage.morphology import remove_small_holes, remove_small_objects
+
 
 def apply_operation(img, operation_list, operation_dict):
 
@@ -198,6 +200,26 @@ def read_image(
 
     return (resized * 255).astype(np.uint8)
 
+def read_image_from_path(
+        filename: str,
+        new_height: int = 400,
+        new_width: int = 600
+) -> np.ndarray:
+    """
+    Helper function for reading image and resizing it.
+
+    Args:
+        filename (str): filename
+        new_height (int): in pixels
+        new_width (int): in pixels
+
+    Returns:
+        resized_image (np.ndarray): values in [0, 255]
+    """
+    image = io.imread(filename)
+    resized = transform.resize(image, (new_height, new_width), anti_aliasing=True)
+
+    return (resized * 255).astype(np.uint8)
 
 def _filter_between_lines(
         hue_image: np.ndarray,
