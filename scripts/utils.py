@@ -102,7 +102,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         image = mpimg.imread(self.images[i])
         # if no mask use dummy mask
         mask = (
-            np.where(self.masks[i] > 0, 1, 0).astype(np.uint8)
+            np.where(mpimg.imread(self.masks[i]) > 0, 1, 0).astype(np.uint8)
             if self.masks
             else np.zeros(image.shape)
         )

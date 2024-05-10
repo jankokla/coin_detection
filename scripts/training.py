@@ -278,26 +278,38 @@ def train_model(
 
     train_losses, valid_losses, train_f1s, valid_f1s = [], [], [], []
 
+    best_f1 = 0
+
     for i in range(num_epochs):
 
         if is_cls:
-            train_loss = train_epoch_cls(
+            train_loss, train_f1 = train_epoch_cls(
                 model, train_loader, criterion, optimizer, scheduler, i + 1
             )
         else:
-            train_loss = train_epoch_seg(
+            train_loss, train_f1 = train_epoch_seg(
                 model, train_loader, criterion, optimizer, scheduler, i + 1
             )
 
-        train_losses.append(train_loss)
-
         if valid_loader and is_cls:
-            valid_loss = valid_epoch_cls(model, valid_loader, criterion, i + 1)
+            valid_loss, valid_f1 = valid_epoch_cls(model, valid_loader, criterion, i + 1)
+
             valid_losses.append(valid_loss)
+            valid_f1s.append(valid_f1)
 
         elif valid_loader:
-            valid_loss = valid_epoch_seg(model, valid_loader, criterion, i + 1)
+            valid_loss, valid_f1 = valid_epoch_seg(model, valid_loader, criterion, i + 1)
+
+            valid_f1s.append(valid_f1)
             valid_losses.append(valid_loss)
+
+        train_losses.append(train_loss)
+        train_f1s.append(train_f1)
+
+        if valid_loader and valid_f1 > best_f1:
+            best_f1 = valid_f1
+            task = 'classification' if is_cls else 'segmentation'
+            save_trainable_params(model, f'models/{task}_resnet.pt')
 
     return train_losses, valid_losses, train_f1s, valid_f1s
 
