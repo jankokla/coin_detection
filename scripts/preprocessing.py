@@ -1,6 +1,6 @@
 
 import numpy as np
-import PIL
+from PIL import Image, ImageEnhance
 from typing import List
 from skimage import io, transform, color, filters
 from skimage.color import rgb2hsv
@@ -319,8 +319,8 @@ def adjust_contrast(image: np.ndarray, contrast: float = 1.9) -> np.ndarray:
     Returns:
         enhanced (np.ndarray): image with adjusted contrast
     """
-    pil_img = PIL.Image.fromarray(image)
-    enhanced = PIL.ImageEnhance.Contrast(pil_img).enhance(contrast)
+    pil_img = Image.fromarray(image)
+    enhanced = ImageEnhance.Contrast(pil_img).enhance(contrast)
 
     return np.array(enhanced)
 
