@@ -90,15 +90,16 @@ class SegmentationDataset(torch.utils.data.Dataset):
             preprocess: partial = None
     ):
 
-        self.images = [mpimg.imread(path) for path in image_paths]
-        self.masks = [mpimg.imread(path) for path in mask_paths] if mask_paths else None
+        self.images = image_paths
+        self.masks = mask_paths if mask_paths else None
 
         self.transform = transform
         self.preprocess = preprocess
 
     def __getitem__(self, i):
 
-        image = self.images[i]
+        filename = self.images[i].split('/')[-1]
+        image = mpimg.imread(self.images[i])
         # if no mask use dummy mask
         mask = (
             np.where(self.masks[i] > 0, 1, 0).astype(np.uint8)
@@ -121,7 +122,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
         image = np.moveaxis(image, -1, 0)
         mask = np.expand_dims(mask, 0)
 
-        return image, mask
+        return image, mask, filename
 
     def __len__(self):
         return len(self.images)
@@ -189,11 +190,19 @@ def split_data(images_path: str, test_size: float, type: str):
     """
     if type == 'segmentation':
         image_paths, mask_paths = _get_paths_segmentation(images_path)
-    else:
+    elif type == 'classification':
         image_paths, mask_paths =_get_paths_classification(images_path)
+    else:
+        image_paths = [
+            os.path.join(images_path, image)
+            for image in sorted(os.listdir(images_path))
+        ]
+        mask_paths = None
 
     # All images in train set, none in test
-    if test_size == 0:
+    if type == 'inference':
+        return image_paths, [], [], []
+    elif test_size == 0:
         return image_paths, [], mask_paths, []
     elif type == 'classification':
         train, test = train_test_split(image_paths, test_size=test_size)

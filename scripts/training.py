@@ -127,7 +127,7 @@ def train_epoch_seg(
     metric_monitor = MetricMonitor()
     stream = tqdm(dataloader)
 
-    for i, (inputs, labels) in enumerate(stream, 1):
+    for i, (inputs, labels, _) in enumerate(stream, 1):
         inputs, labels = inputs.to(device), labels.to(device)
 
         # zero the parameter gradients
@@ -226,7 +226,7 @@ def valid_epoch_seg(model, dataloader, criterion, epoch) -> (float, float):
     metric_monitor = MetricMonitor()
     stream = tqdm(dataloader)
 
-    for i, (inputs, labels) in enumerate(stream, 1):
+    for i, (inputs, labels, _) in enumerate(stream, 1):
 
         # use gpu whenever possible
         inputs, labels = inputs.to(device), labels.to(device)
