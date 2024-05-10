@@ -53,7 +53,7 @@ class MetricMonitor:
 
 
 def train_epoch_cls(
-    model, dataloader, criterion, optimizer, scheduler, epoch
+        model, dataloader, criterion, optimizer, scheduler, epoch
 ) -> (float, float):
     """
     Train the classification model and return epoch loss and average f1 score.
@@ -105,7 +105,7 @@ def train_epoch_cls(
 
 
 def train_epoch_seg(
-    model, dataloader, criterion, optimizer, scheduler, epoch
+        model, dataloader, criterion, optimizer, scheduler, epoch
 ) -> (float, float):
     """
     Train the segmentation model and return epoch loss and average f1 score.
@@ -183,7 +183,6 @@ def valid_epoch_cls(model, dataloader, criterion, epoch) -> (float, float):
     stream = tqdm(dataloader)
 
     for i, (inputs, labels, radii) in enumerate(stream, 1):
-
         # use gpu whenever possible
         inputs, labels, radii = inputs.to(device), labels.to(device), radii.to(device)
 
@@ -227,7 +226,6 @@ def valid_epoch_seg(model, dataloader, criterion, epoch) -> (float, float):
     stream = tqdm(dataloader)
 
     for i, (inputs, labels, _) in enumerate(stream, 1):
-
         # use gpu whenever possible
         inputs, labels = inputs.to(device), labels.to(device)
 
@@ -256,7 +254,7 @@ def valid_epoch_seg(model, dataloader, criterion, epoch) -> (float, float):
 
 
 def train_model(
-    model, dataloaders, criterion, optimizer, scheduler, num_epochs
+        model, dataloaders, criterion, optimizer, scheduler, num_epochs
 ) -> tuple:
     """
     Train model for number of epochs and calculate loss and f1.
@@ -269,8 +267,7 @@ def train_model(
     :param num_epochs:
     :return: lists of train_losses, valid_losses, train_f1s, valid_f1s
     """
-    is_cls = isinstance(criterion, CrossEntropyLoss)
-
+    task = model.task
     train_loader, valid_loader = dataloaders
 
     device = get_best_available_device()
@@ -282,7 +279,7 @@ def train_model(
 
     for i in range(num_epochs):
 
-        if is_cls:
+        if task == "classification":
             train_loss, train_f1 = train_epoch_cls(
                 model, train_loader, criterion, optimizer, scheduler, i + 1
             )
@@ -291,7 +288,7 @@ def train_model(
                 model, train_loader, criterion, optimizer, scheduler, i + 1
             )
 
-        if valid_loader and is_cls:
+        if valid_loader and task == "classification":
             valid_loss, valid_f1 = valid_epoch_cls(model, valid_loader, criterion, i + 1)
 
             valid_losses.append(valid_loss)
@@ -308,14 +305,16 @@ def train_model(
 
         if valid_loader and valid_f1 > best_f1:
             best_f1 = valid_f1
-            task = 'classification' if is_cls else 'segmentation'
-            save_trainable_params(model, f'models/{task}_resnet.pt')
+            torch.save(model.state_dict(), f'models/{task}_resnet.pt')
 
     return train_losses, valid_losses, train_f1s, valid_f1s
 
 
 class CoinClassifier(nn.Module):
-    def __init__(self, num_classes):
+
+    task = "classification"
+
+    def __init__(self, num_classes: int = 16):
         super().__init__()
 
         self.model = models.resnet50(weights='IMAGENET1K_V2')
@@ -331,6 +330,7 @@ class CoinClassifier(nn.Module):
         self.fc = nn.Sequential(
             nn.Linear(num_features + 1, 512),  # +1 for the radius
             nn.ReLU(),
+            nn.Dropout(0.5),
             nn.Linear(512, num_classes)
         )
 
@@ -348,6 +348,32 @@ class CoinClassifier(nn.Module):
         return output
 
 
+class CoinLocalizer(nn.Module):
+
+    task = "segmentation"
+
+    def __init__(
+            self,
+            encoder_name: str = "resnet50",
+            num_classes: int = 1,
+            num_channels: int = 3
+    ):
+        super().__init__()
+
+        self.model = smp.Unet(
+            encoder_name=encoder_name,
+            encoder_weights="imagenet",
+            in_channels=num_channels,
+            classes=num_classes,
+        )
+
+        for param in self.model.encoder.parameters():
+            param.requires_grad = False
+
+    def forward(self, images):
+        return self.model.forward(images)
+
+
 def get_best_available_device() -> str:
     """
     Get best available device for model training.
@@ -360,20 +386,6 @@ def get_best_available_device() -> str:
     return devices[np.argmax(is_available)]
 
 
-def setup_seed(seed: int):
-    """
-    Create global seed for torch, numpy and cuda.
-
-    :param seed:
-    """
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-    random.seed(seed)
-    torch.backends.cudnn.deterministic = True
-
-
 def save_trainable_params(model, filepath):
     """
     Saves only the trainable parameters of a model to the specified filepath.
@@ -382,11 +394,8 @@ def save_trainable_params(model, filepath):
         model (torch.nn.Module): The model whose parameters are to be saved.
         filepath (str): Path to save the filtered state dict.
     """
-    # Filter the model's state dict to include only parameters with requires_grad=True
-    trainable_params = {name: param for name, param in model.state_dict().items() if param.requires_grad}
-
-    # Save these trainable parameters
-    torch.save(trainable_params, filepath)
+    # save only trainable parameters
+    torch.save(model.get_finetuned_state_dict(), filepath)
 
 
 def load_updated_params(model, filepath) -> nn.Module:
