@@ -1,7 +1,9 @@
 import json
 import os
+import warnings
 from functools import partial
-from typing import List, Tuple
+from typing import List, Tuple, Union
+import cv2 as cv
 
 import numpy as np
 import torch.utils.data
@@ -10,7 +12,9 @@ from matplotlib import image as mpimg
 import albumentations as A
 from sklearn.metrics import pairwise_distances
 from sklearn.model_selection import train_test_split
+from torch import nn
 
+from scripts.config import id_to_label
 from scripts.training import get_best_available_device
 
 
@@ -20,14 +24,14 @@ class ClassificationDataset(torch.utils.data.Dataset):
 
     Args:
         image_paths (List[str]): list of full paths to images
-        mask_paths (List[str]): list of full paths to masks
+        labels_path (List[str]): path to classification JSON
         transform (A.Compose): custom transformations from Albumentations
         preprocess (partial): encoder-specific transforms callable
     """
 
     def __init__(
             self,
-            image_paths: List[str],
+            image_paths: Union[List[str], np.ndarray],
             labels_path: str = None,
             transform: A.Compose = None,
             preprocess: partial = None
@@ -35,17 +39,24 @@ class ClassificationDataset(torch.utils.data.Dataset):
 
         self.image_paths = image_paths
 
-        with open(labels_path, 'r') as file:
-            self.labels = json.load(file)
+        if labels_path:
+            with open(labels_path, 'r') as file:
+                self.labels = json.load(file)
+        else:
+            self.labels = None
 
         self.transform = transform
         self.preprocess = preprocess
 
     def __getitem__(self, i):
 
-        filepath = self.image_paths[i]
-        image = mpimg.imread(filepath)
-        label = self.labels[filepath.split('/')[-1]]
+        if isinstance(self.image_paths, np.ndarray):
+            image = self.image_paths
+            label = -1
+        else:
+            filepath = self.image_paths[i]
+            image = mpimg.imread(filepath)
+            label = self.labels[filepath.split('/')[-1]]
 
         radius = np.mean(image.shape[:2]) / 2
 
@@ -63,7 +74,7 @@ class ClassificationDataset(torch.utils.data.Dataset):
         # convert to Pytorch format HWC -> CHW
         image = np.moveaxis(image, -1, 0)
 
-        return (torch.tensor(image),
+        return (torch.tensor(image, dtype=torch.float32),
                 torch.tensor(label),
                 torch.tensor(radius, dtype=torch.float32))
 
@@ -100,6 +111,7 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
         filename = self.images[i].split('/')[-1]
         image = mpimg.imread(self.images[i])
+
         # if no mask use dummy mask
         mask = (
             np.where(mpimg.imread(self.masks[i]) > 0, 1, 0).astype(np.uint8)
@@ -129,20 +141,48 @@ class SegmentationDataset(torch.utils.data.Dataset):
 
 
 @torch.no_grad()
-def get_prediction(model, image) -> np.ndarray:
+def get_segmentation(model: nn.Module, image: torch.Tensor) -> np.ndarray:
     """
     Return segmentation prediction for the specific image.
 
-    :param model: used for inference
-    :param image: torch.Tensor
-    :return: segmented image
+    Args:
+        model (nn.Module): must be trained
+        image (torch.Tensor): for which we need to predict the mask
+
+    Returns:
+        segmentation (np.ndarray): mask with values in {0, 255}
     """
     device = get_best_available_device()
-    image = image.to(device)
+    image, model = image.to(device), model.to(device)
     model.eval()
+
     logits = model(image.float())
     prediction_sigmoid = logits.sigmoid().cpu().numpy().squeeze()
-    return np.where(prediction_sigmoid >= 0.5, 1, 0)
+    bool_array = np.where(prediction_sigmoid >= 0.5, 1, 0)
+
+    return (bool_array * 255).astype(np.uint8)
+
+
+@torch.no_grad()
+def get_class(model: nn.Module, coin, radius) -> str:
+    """
+    Return class for the specific coin.
+
+    Args:
+        model (nn.Module): must be trained
+        coin (torch.Tensor): image of the coin
+        radius (torch.Tensor): of the coin
+
+    Returns:
+        class_label (str): coin name
+    """
+    device = get_best_available_device()
+    model, coin, radius = model.to(device), coin.to(device), radius.to(device)
+
+    logits = model(coin, radius)
+    pred = id_to_label(logits.argmax(dim=-1).cpu().numpy())
+
+    return pred[0]
 
 
 def _get_paths_segmentation(images_path: str) -> Tuple[list, list]:
@@ -176,6 +216,7 @@ def _get_paths_classification(images_path: str) -> Tuple[list, None]:
 
 def split_data(images_path: str, test_size: float, type: str):
     """
+    Split data to training and validation.
 
     Args:
         images_path (str): absolute or relative path of the img directory
@@ -259,8 +300,14 @@ def filter_circles(hough_output: np.ndarray) -> np.ndarray:
     return hough_output[keep]
 
 
-def get_images_from_coco(images_path, annotation_json) -> None:
+def get_images_from_coco(images_path: str, annotation_json: str) -> None:
+    """
+    Based on coco JSON file cut coins from images and save them to files.
 
+    Args:
+        images_path (str): original images
+        annotation_json (str): coco JSON path
+    """
     # if data already downloaded -> no need for action
     if len(os.listdir('data/classification')) != 0:
         print('Files already there, good to go!')
@@ -305,3 +352,75 @@ def get_images_from_coco(images_path, annotation_json) -> None:
         json.dump(labels, outfile)
 
 
+def generate_hough(
+        prediction: np.ndarray,
+        original_img: Union[np.ndarray, torch.Tensor]
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Generate Hough circles and plot them to image.
+
+    Args:
+        prediction (np.ndarray): binary image
+        original_img (Union[np.ndarray, torch.Tensor]): as image template
+
+    Returns:
+        circles (np.ndarray): list of tuples as (x, y, r)
+        hough_img (np.ndarray): image with Hough circles
+    """
+    circles = cv.HoughCircles(
+        prediction, cv.HOUGH_GRADIENT, 1, 20,
+        param1=200, param2=10, minRadius=15, maxRadius=55
+    )
+    circles = filter_circles(circles)
+
+    if isinstance(original_img, torch.Tensor):
+        original_img = original_img.cpu().numpy()
+
+    hough_img = original_img.copy()
+
+    # if comes as a batch (1, 3, H, W)
+    if len(hough_img.shape) == 4:
+        hough_img = hough_img.squeeze(0)
+
+    # if channel is first -> HWC
+    if hough_img.shape[0] == 3:
+        hough_img = hough_img.transpose(1, 2, 0)
+
+    hough_img = cv.cvtColor(hough_img, cv.COLOR_BGR2RGB)
+
+    for (x, y, r) in circles:
+        cv.circle(hough_img, (x, y), r, (255, 0, 0), 4)
+
+    return circles, hough_img
+
+
+def get_cropped_image(
+        image: np.ndarray, x, y, r, x_ratio, y_ratio, padding: int = 40
+) -> np.ndarray:
+    """
+    Based on circle info and ratio, crop the coin from the image.
+
+    Args:
+        image (np.ndarray): from where to cut the coins
+        x (float): center x-coordinate
+        y (float): center y-coordinate
+        r (float): radius
+        x_ratio (float): scaling factor for circle info
+        y_ratio (float): scaling factor for circle info
+        padding (int): add some margin on the edges
+
+    Returns:
+        cropped_image (np.ndarray)
+    """
+    x = int(x * x_ratio)
+    y = int(y * y_ratio)
+    r = int(r * max(x_ratio, y_ratio))
+
+    # calculate the region of box
+    top_left_x = max(0, x - r - padding)
+    top_left_y = max(0, y - r - padding)
+    bottom_right_x = x + r + padding
+    bottom_right_y = y + r + padding
+
+    # crop the image
+    return image[top_left_y:bottom_right_y, top_left_x:bottom_right_x]
