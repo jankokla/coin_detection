@@ -1,24 +1,20 @@
 """config.py: Helper constants to import."""
 
-import numpy as np
+ID_TO_CCY = {
+    0: 'CHF',
+    1: 'EUR',
+    2: 'OOD'
+}
 
-LABEL_TO_ID = {
-    '5CHF': 0,
-    '2CHF': 1,
-    '1CHF': 2,
-    '0.5CHF': 3,
-    '0.2CHF': 4,
-    '0.1CHF': 5,
-    '0.05CHF': 6,
-    '2EUR': 7,
-    '1EUR': 8,
-    '0.5EUR': 9,
-    '0.2EUR': 10,
-    '0.1EUR': 11,
-    '0.05EUR': 12,
-    '0.02EUR': 13,
-    '0.01EUR': 14,
-    'OOD': 15
+ID_TO_EUR = {
+    0: '2EUR',
+    1: '1EUR',
+    2: '0.5EUR',
+    3: '0.2EUR',
+    4: '0.1EUR',
+    5: '0.05EUR',
+    6: '0.02EUR',
+    7: '0.01EUR'
 }
 
 ID_TO_LABEL = {
@@ -58,8 +54,6 @@ row_template = {
     '0.01EUR': 0,
     'OOD': 0
 }
-
-id_to_label = np.vectorize(lambda x: ID_TO_LABEL.get(x, "Unknown"))
 
 example_row = [
     '5CHF', '2CHF', '1CHF', '0.5CHF', '0.2CHF', '0.1CHF', '0.05CHF', '2EUR',
