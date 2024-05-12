@@ -1,20 +1,19 @@
 import json
 import os
-import warnings
-from functools import partial
-from typing import List, Tuple, Union
-import cv2 as cv
 
+import cv2 as cv
 import numpy as np
 import torch.utils.data
-from PIL import Image
-from matplotlib import image as mpimg, pyplot as plt
 import albumentations as A
+
+from functools import partial
+from typing import List, Tuple, Union
+from torch import nn
+from PIL import Image
 from sklearn.metrics import pairwise_distances
 from sklearn.model_selection import train_test_split
-from torch import nn
+from matplotlib import image as mpimg, pyplot as plt
 
-from scripts.config import id_to_label
 from scripts.training import get_best_available_device
 
 
@@ -161,13 +160,13 @@ def get_segmentation(model: nn.Module, image: torch.Tensor) -> np.ndarray:
 @torch.no_grad()
 def get_class(model: nn.Module, coin, radius, label_mapper) -> list:
     """
-    TODO: update
-    Return class for the specific coin.
+    Predict model class given the coin, radius and model
 
     Args:
         model (nn.Module): must be trained
         coin (torch.Tensor): image of the coin
         radius (torch.Tensor): of the coin
+        label_mapper (callable): id -> label
 
     Returns:
         class_label (str): coin name
@@ -213,6 +212,7 @@ def _get_paths_classification(images_path: str) -> Tuple[list, None]:
 
 
 def _convert_to_eur(image_paths: List[str], labels: dict) -> tuple:
+    """Convert id-s to train eur-specific model."""
     root_list = image_paths[0].split('/')[:-1]
     final_labels = labels.copy()
 
@@ -229,6 +229,7 @@ def _convert_to_eur(image_paths: List[str], labels: dict) -> tuple:
 
 
 def _convert_to_chf(image_paths: List[str], labels: dict) -> tuple:
+    """Convert id-s to train chf-specific model."""
     root_list = image_paths[0].split('/')[:-1]
     final_labels = labels.copy()
 
@@ -244,7 +245,7 @@ def _convert_to_chf(image_paths: List[str], labels: dict) -> tuple:
 
 
 def _convert_to_ccy(image_paths: List[str], labels: dict) -> tuple:
-
+    """Convert id-s to train ccy model (EUR, CHF, OOD)."""
     for filename, id_ in labels.items():
         if id_ <= 6:
             labels[filename] = 0
@@ -257,7 +258,7 @@ def _convert_to_ccy(image_paths: List[str], labels: dict) -> tuple:
 
 
 def _update_paths(image_paths: List[str], coin_type: str, labels_path: str) -> tuple:
-    """TODO: update"""
+    """Fix labels depending on the trainable model."""
     preprocess_func = {
         None: lambda: None,
         "eur": _convert_to_eur,
@@ -281,7 +282,7 @@ def split_data(
         coin_type: str = None
 ):
     """
-    TODO: update
+    Split data and consider all possible classification models.
 
     Args:
         images_path (str): absolute or relative path of the img directory
@@ -333,7 +334,7 @@ def split_data(
 
 
 def plot_training(train_losses, valid_losses, train_f1s, valid_f1s):
-    """TODO: update"""
+    """Plot training progress."""
     best_f1_epoch = valid_f1s.index(max(valid_f1s))
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
@@ -406,14 +407,16 @@ def filter_circles(hough_output: np.ndarray) -> np.ndarray:
     return hough_output[keep]
 
 
-def get_images_from_coco(images_path: str, annotation_json: str, cls_path: str) -> None:
+def get_images_from_coco(
+        images_path: str, annotation_json: str, cls_path: str
+) -> None:
     """
-    TODO: update
     Based on coco JSON file cut coins from images and save them to files.
 
     Args:
         images_path (str): original images
         annotation_json (str): coco JSON path
+        cls_path (str): classification directory path
     """
     # if data already downloaded -> no need for action
     if len(os.listdir(cls_path)) != 0:
