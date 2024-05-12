@@ -8,7 +8,7 @@ import cv2 as cv
 import numpy as np
 import torch.utils.data
 from PIL import Image
-from matplotlib import image as mpimg
+from matplotlib import image as mpimg, pyplot as plt
 import albumentations as A
 from sklearn.metrics import pairwise_distances
 from sklearn.model_selection import train_test_split
@@ -20,11 +20,11 @@ from scripts.training import get_best_available_device
 
 class ClassificationDataset(torch.utils.data.Dataset):
     """
-    Dataset class for segmentation.
+    TODO: update
 
     Args:
         image_paths (List[str]): list of full paths to images
-        labels_path (List[str]): path to classification JSON
+        labels (dict): with filename as key and id as value
         transform (A.Compose): custom transformations from Albumentations
         preprocess (partial): encoder-specific transforms callable
     """
@@ -32,18 +32,13 @@ class ClassificationDataset(torch.utils.data.Dataset):
     def __init__(
             self,
             image_paths: Union[List[str], np.ndarray],
-            labels_path: str = None,
+            labels: dict = None,
             transform: A.Compose = None,
             preprocess: partial = None
     ):
 
         self.image_paths = image_paths
-
-        if labels_path:
-            with open(labels_path, 'r') as file:
-                self.labels = json.load(file)
-        else:
-            self.labels = None
+        self.labels = labels
 
         self.transform = transform
         self.preprocess = preprocess
@@ -164,8 +159,9 @@ def get_segmentation(model: nn.Module, image: torch.Tensor) -> np.ndarray:
 
 
 @torch.no_grad()
-def get_class(model: nn.Module, coin, radius) -> str:
+def get_class(model: nn.Module, coin, radius, label_mapper) -> list:
     """
+    TODO: update
     Return class for the specific coin.
 
     Args:
@@ -179,10 +175,12 @@ def get_class(model: nn.Module, coin, radius) -> str:
     device = get_best_available_device()
     model, coin, radius = model.to(device), coin.to(device), radius.to(device)
 
-    logits = model(coin, radius)
-    pred = id_to_label(logits.argmax(dim=-1).cpu().numpy())
+    pred = model(coin, radius)
 
-    return pred[0]
+    if isinstance(pred, torch.Tensor):
+        pred = pred.argmax(dim=-1).cpu().numpy()
+
+    return label_mapper(pred).item()
 
 
 def _get_paths_segmentation(images_path: str) -> Tuple[list, list]:
@@ -214,14 +212,81 @@ def _get_paths_classification(images_path: str) -> Tuple[list, None]:
     return image_paths, None
 
 
-def split_data(images_path: str, test_size: float, type: str):
+def _convert_to_eur(image_paths: List[str], labels: dict) -> tuple:
+    root_list = image_paths[0].split('/')[:-1]
+    final_labels = labels.copy()
+
+    for filename, id_ in labels.items():
+        if id_ <= 6 or id_ == 15:
+            filepath = os.path.join(*root_list, filename)
+            if filepath in image_paths:
+                image_paths.remove(filepath)
+                final_labels.pop(filename, None)
+        else:
+            final_labels[filename] = id_ - 7
+
+    return image_paths, final_labels
+
+
+def _convert_to_chf(image_paths: List[str], labels: dict) -> tuple:
+    root_list = image_paths[0].split('/')[:-1]
+    final_labels = labels.copy()
+
+    for filename, id_ in labels.items():
+
+        if id_ > 6:  # not CHF
+            filepath = os.path.join(*root_list, filename)
+            if filepath in image_paths:
+                image_paths.remove(filepath)
+                final_labels.pop(filename, None)
+
+    return image_paths, final_labels
+
+
+def _convert_to_ccy(image_paths: List[str], labels: dict) -> tuple:
+
+    for filename, id_ in labels.items():
+        if id_ <= 6:
+            labels[filename] = 0
+        elif 7 <= id_ <= 14:
+            labels[filename] = 1
+        elif id_ == 15:
+            labels[filename] = 2
+
+    return image_paths, labels
+
+
+def _update_paths(image_paths: List[str], coin_type: str, labels_path: str) -> tuple:
+    """TODO: update"""
+    preprocess_func = {
+        None: lambda: None,
+        "eur": _convert_to_eur,
+        "chf": _convert_to_chf,
+        "ccy": _convert_to_ccy
+    }
+
+    with open(labels_path, 'r') as file:
+        labels = json.load(file)
+
+    image_paths, labels = preprocess_func[coin_type](image_paths, labels)
+
+    return image_paths, labels
+
+
+def split_data(
+        images_path: str,
+        test_size: float,
+        modelling_type: str,
+        labels_path: str = None,
+        coin_type: str = None
+):
     """
-    Split data to training and validation.
+    TODO: update
 
     Args:
         images_path (str): absolute or relative path of the img directory
         test_size (float): from range [0, 1]
-        type (str): either "segmentation" or "classification"
+        type (str): either "segmentation", "classification" or "inference"
 
     Returns:
         image_path_train (List[str])
@@ -229,27 +294,68 @@ def split_data(images_path: str, test_size: float, type: str):
         mask_path_train (List[str])
         mask_path_test (List[str])
     """
-    if type == 'segmentation':
-        image_paths, mask_paths = _get_paths_segmentation(images_path)
-    elif type == 'classification':
-        image_paths, mask_paths =_get_paths_classification(images_path)
+    if modelling_type == 'segmentation':
+        image_paths, mask = _get_paths_segmentation(images_path)
+
+    elif modelling_type == 'classification':
+
+        image_paths, mask = _get_paths_classification(images_path)
+        if labels_path:
+            image_paths, mask = _update_paths(image_paths, coin_type, labels_path)
+
     else:
         image_paths = [
             os.path.join(images_path, image)
             for image in sorted(os.listdir(images_path))
         ]
-        mask_paths = None
+        mask = None
 
     # All images in train set, none in test
-    if type == 'inference':
+    if modelling_type == 'inference':
         return image_paths, [], [], []
+
     elif test_size == 0:
-        return image_paths, [], mask_paths, []
-    elif type == 'classification':
-        train, test = train_test_split(image_paths, test_size=test_size)
-        return train, test, None, None
+        return image_paths, [], mask, []
+
+    elif modelling_type == 'classification':
+
+        if labels_path and coin_type:
+            labels = [mask[os.path.basename(path)] for path in image_paths]
+            train, test = train_test_split(image_paths, test_size=test_size, stratify=labels)
+
+        else:
+            train, test = train_test_split(image_paths, test_size=test_size)
+
+        return train, test, mask, mask
+
     else:
-        return train_test_split(image_paths, mask_paths, test_size=test_size)
+        return train_test_split(image_paths, mask, test_size=test_size)
+
+
+def plot_training(train_losses, valid_losses, train_f1s, valid_f1s):
+    """TODO: update"""
+    best_f1_epoch = valid_f1s.index(max(valid_f1s))
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+
+    ax1.plot(train_losses, label='Training Loss')
+    ax1.plot(valid_losses, label='Validation Loss')
+    ax1.set_title('Training and Validation Loss')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss')
+    ax1.axvline(x=best_f1_epoch, color='r', linestyle='--', label='Best Validation F1')
+    ax1.legend()
+
+    ax2.plot(train_f1s, label='Training F1')
+    ax2.plot(valid_f1s, label='Validation F1')
+    ax2.set_title('Training and Validation F1 Score')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('F1 Score')
+    ax2.axvline(x=best_f1_epoch, color='r', linestyle='--', label='Best Validation F1')
+    ax2.legend()
+
+    plt.tight_layout()
+    plt.show()
 
 
 def filter_circles(hough_output: np.ndarray) -> np.ndarray:
@@ -300,8 +406,9 @@ def filter_circles(hough_output: np.ndarray) -> np.ndarray:
     return hough_output[keep]
 
 
-def get_images_from_coco(images_path: str, annotation_json: str) -> None:
+def get_images_from_coco(images_path: str, annotation_json: str, cls_path: str) -> None:
     """
+    TODO: update
     Based on coco JSON file cut coins from images and save them to files.
 
     Args:
@@ -309,7 +416,7 @@ def get_images_from_coco(images_path: str, annotation_json: str) -> None:
         annotation_json (str): coco JSON path
     """
     # if data already downloaded -> no need for action
-    if len(os.listdir('data/classification')) != 0:
+    if len(os.listdir(cls_path)) != 0:
         print('Files already there, good to go!')
         return
 
