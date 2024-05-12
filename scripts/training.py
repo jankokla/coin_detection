@@ -1,14 +1,14 @@
 """training.py: helper functions for convenient training."""
-import random
+import os
 from collections import defaultdict
 import segmentation_models_pytorch as smp
+from pathlib import Path
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torcheval.metrics.functional import multiclass_f1_score as f1_eval
-from torchvision import models
 from tqdm import tqdm
 
 
@@ -304,74 +304,14 @@ def train_model(
         train_f1s.append(train_f1)
 
         if valid_loader and valid_f1 > best_f1:
+
             best_f1 = valid_f1
-            torch.save(model.state_dict(), f'models/{task}_resnet.pt')
+
+            root = Path(__file__).parent.parent
+            filepath = f'{root}/models/{task}_{model.coin_type}.pt'
+            save_trainable_params(model, filepath)
 
     return train_losses, valid_losses, train_f1s, valid_f1s
-
-
-class CoinClassifier(nn.Module):
-
-    task = "classification"
-
-    def __init__(self, num_classes: int = 16):
-        super().__init__()
-
-        self.model = models.resnet50(weights='IMAGENET1K_V2')
-
-        num_features = self.model.fc.in_features
-
-        self.model.fc = nn.Identity()
-
-        for param in self.model.parameters():
-            param.requires_grad = False
-
-        # Replace the fully connected layer with a Sequential module
-        self.fc = nn.Sequential(
-            nn.Linear(num_features + 1, 512),  # +1 for the radius
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(512, num_classes)
-        )
-
-    def forward(self, images, radii):
-        # Process images through the ResNet50 to get feature vectors
-        image_features = self.model(images)
-
-        # Concatenate image features with radius values
-        # Radii should be reshaped or expanded to match the batch size of image_features if not already
-        combined_features = torch.cat((image_features, radii.unsqueeze(-1)), dim=1)
-
-        # Process the combined features through the new fully connected layers
-        output = self.fc(combined_features)
-
-        return output
-
-
-class CoinLocalizer(nn.Module):
-
-    task = "segmentation"
-
-    def __init__(
-            self,
-            encoder_name: str = "resnet50",
-            num_classes: int = 1,
-            num_channels: int = 3
-    ):
-        super().__init__()
-
-        self.model = smp.Unet(
-            encoder_name=encoder_name,
-            encoder_weights="imagenet",
-            in_channels=num_channels,
-            classes=num_classes,
-        )
-
-        for param in self.model.encoder.parameters():
-            param.requires_grad = False
-
-    def forward(self, images):
-        return self.model.forward(images)
 
 
 def get_best_available_device() -> str:
@@ -386,26 +326,60 @@ def get_best_available_device() -> str:
     return devices[np.argmax(is_available)]
 
 
-def save_trainable_params(model, filepath):
+def find_bn_layers(model: nn.Module, prefix: str, bn_layers: dict):
     """
-    Saves only the trainable parameters of a model to the specified filepath.
+    Find batch normalization layers from model as we need to save
+        running_mean and running_var from them.
+
+    Args:
+        model (nn.Module): model that is being considered
+        prefix (str): of the param name
+        bn_layers (dict): to keep track of them
+
+    Returns:
+        bn_layers (dict): with all bn layer names
+    """
+    for name, child in model.named_children():
+        full_name = f"{prefix}.{name}" if prefix else name
+        if isinstance(child, nn.BatchNorm2d):
+            # Store the prefix with the layer name
+            bn_layers[full_name + '.running_mean'] = child.running_mean
+            bn_layers[full_name + '.running_var'] = child.running_var
+        # Recurse into child modules
+        find_bn_layers(child, full_name if prefix else name, bn_layers)
+
+
+def save_trainable_params(model: nn.Module, filepath: str) -> None:
+    """
+    Save only not frozen parameters and batch normalization information.
 
     Args:
         model (torch.nn.Module): The model whose parameters are to be saved.
         filepath (str): Path to save the filtered state dict.
     """
-    # save only trainable parameters
-    torch.save(model.get_finetuned_state_dict(), filepath)
+    bn_layers = {}
+    find_bn_layers(model, "", bn_layers)
+
+    filtered_state_dict = {}
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            filtered_state_dict[name] = param
+    for name, tensor in bn_layers.items():
+        filtered_state_dict[name] = tensor
+
+    torch.save(filtered_state_dict, filepath)
 
 
-def load_updated_params(model, filepath) -> nn.Module:
+def load_params(model, filename: str) -> nn.Module:
     """
-    Update model state_dict with fine-tuned head params.
+    Load parameters from the models directory given the filename
 
     Args:
-        model (torch.nn.Module): The model to load the parameters into.
-        filepath (str): The path to the file containing the saved parameters.
+        model (torch.nn.Module): The model to load the parameters into
+        filename (str): of the .pt file
     """
+    root = Path(__file__).parent.parent
+    filepath = os.path.join(root, "models", filename)
 
     pretrained_dict = model.state_dict()
     saved_state_dict = torch.load(filepath)
