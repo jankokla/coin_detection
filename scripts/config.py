@@ -6,6 +6,17 @@ ID_TO_CCY = {
     2: 'OOD'
 }
 
+ID_TO_SIDE = {
+    0: 'tail',
+    1: 'head'
+}
+
+ID_TO_CHF_IMG = {
+    0: '5CHF',
+    1: '2/1/0.5CHF',
+    2: '0.2/0.1/0.05CHF'
+}
+
 ID_TO_EUR = {
     0: '2EUR',
     1: '1EUR',

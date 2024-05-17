@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from timm.models import VisionTransformer
 from torch import nn
 from torch.nn import CrossEntropyLoss
 from torcheval.metrics.functional import multiclass_f1_score as f1_eval
@@ -80,7 +81,7 @@ def train_epoch_cls(
         optimizer.zero_grad()
 
         # forward + backward + optimize
-        logits = model(inputs.float(), radii.float())
+        logits = model(inputs.float())
 
         loss = criterion(logits, labels)
 
@@ -187,7 +188,7 @@ def valid_epoch_cls(model, dataloader, criterion, epoch) -> (float, float):
         inputs, labels, radii = inputs.to(device), labels.to(device), radii.to(device)
 
         # predict
-        logits = model(inputs.float(), radii.float())
+        logits = model(inputs.float())
 
         loss = criterion(logits, labels)
 
@@ -275,7 +276,7 @@ def train_model(
 
     train_losses, valid_losses, train_f1s, valid_f1s = [], [], [], []
 
-    best_f1 = 0
+    best_valid_loss = float("inf")
 
     for i in range(num_epochs):
 
@@ -303,9 +304,9 @@ def train_model(
         train_losses.append(train_loss)
         train_f1s.append(train_f1)
 
-        if valid_loader and valid_f1 > best_f1:
+        if valid_loader and round(valid_loss, 3) < best_valid_loss:
 
-            best_f1 = valid_f1
+            best_valid_loss = round(valid_loss, 3)
 
             root = Path(__file__).parent.parent
             filepath = f'{root}/models/{task}_{model.coin_type}.pt'
@@ -357,17 +358,28 @@ def save_trainable_params(model: nn.Module, filepath: str) -> None:
         model (torch.nn.Module): The model whose parameters are to be saved.
         filepath (str): Path to save the filtered state dict.
     """
-    bn_layers = {}
-    find_bn_layers(model, "", bn_layers)
+    # no batch norms yeah
+    if isinstance(model.model, VisionTransformer):
 
-    filtered_state_dict = {}
-    for name, param in model.named_parameters():
-        if param.requires_grad:
-            filtered_state_dict[name] = param
-    for name, tensor in bn_layers.items():
-        filtered_state_dict[name] = tensor
+        if model.backbone_frozen:
+            torch.save(model.model.head.state_dict(), filepath)
+        else:
+            torch.save(model.model.state_dict(), filepath)
 
-    torch.save(filtered_state_dict, filepath)
+    else:
+        bn_layers = {}
+        find_bn_layers(model, "", bn_layers)
+
+        filtered_state_dict = {}
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                filtered_state_dict[name] = param
+        for name, tensor in bn_layers.items():
+            filtered_state_dict[name] = tensor
+
+        filtered_state_dict = model.state_dict()
+
+        torch.save(filtered_state_dict, filepath)
 
 
 def load_params(model, filename: str) -> nn.Module:
@@ -381,12 +393,20 @@ def load_params(model, filename: str) -> nn.Module:
     root = Path(__file__).parent.parent
     filepath = os.path.join(root, "models", filename)
 
-    pretrained_dict = model.state_dict()
     saved_state_dict = torch.load(filepath)
 
-    # update state dict with saved params
-    pretrained_dict.update(saved_state_dict)
+    # no batch norms yeah
+    if isinstance(model.model, VisionTransformer):
 
-    model.load_state_dict(pretrained_dict)
+        if model.backbone_frozen:
+            model.model.head.load_state_dict(saved_state_dict)
+        else:
+            model.model.load_state_dict(saved_state_dict)
+
+    else:
+        pretrained_dict = dict(model.state_dict())
+        # update state dict with saved params
+        pretrained_dict.update(saved_state_dict)
+        model.load_state_dict(pretrained_dict)
 
     return model

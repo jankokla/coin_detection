@@ -158,28 +158,25 @@ def get_segmentation(model: nn.Module, image: torch.Tensor) -> np.ndarray:
 
 
 @torch.no_grad()
-def get_class(model: nn.Module, coin, radius, label_mapper) -> list:
+def get_class(model: nn.Module, coin, label_mapper) -> tuple:
     """
-    Predict model class given the coin, radius and model
+    TODO: update
 
     Args:
-        model (nn.Module): must be trained
-        coin (torch.Tensor): image of the coin
-        radius (torch.Tensor): of the coin
-        label_mapper (callable): id -> label
+        model:
+        coin:
+        radius:
+        label_mapper:
 
     Returns:
-        class_label (str): coin name
+
     """
-    device = get_best_available_device()
-    model, coin, radius = model.to(device), coin.to(device), radius.to(device)
+    probs = model(coin).softmax(dim=-1)
+    id_ = probs.argmax(dim=-1).cpu().numpy().item()
+    prob = round(probs[0, id_].detach().cpu().numpy().item(), 2)
+    label = label_mapper(id_).item()
 
-    pred = model(coin, radius)
-
-    if isinstance(pred, torch.Tensor):
-        pred = pred.argmax(dim=-1).cpu().numpy()
-
-    return label_mapper(pred).item()
+    return id_, label, prob,
 
 
 def _get_paths_segmentation(images_path: str) -> Tuple[list, list]:
@@ -228,14 +225,14 @@ def _convert_to_eur(image_paths: List[str], labels: dict) -> tuple:
     return image_paths, final_labels
 
 
-def _convert_to_chf(image_paths: List[str], labels: dict) -> tuple:
+def _convert_to_heads_tails(image_paths: List[str], labels: dict) -> tuple:
     """Convert id-s to train chf-specific model."""
     root_list = image_paths[0].split('/')[:-1]
     final_labels = labels.copy()
 
     for filename, id_ in labels.items():
 
-        if id_ > 6:  # not CHF
+        if id_ == -1:  # not CHF
             filepath = os.path.join(*root_list, filename)
             if filepath in image_paths:
                 image_paths.remove(filepath)
@@ -245,14 +242,12 @@ def _convert_to_chf(image_paths: List[str], labels: dict) -> tuple:
 
 
 def _convert_to_ccy(image_paths: List[str], labels: dict) -> tuple:
-    """Convert id-s to train ccy model (EUR, CHF, OOD)."""
+    """Convert id-s to train ccy model (EUR and CHF)."""
     for filename, id_ in labels.items():
         if id_ <= 6:
             labels[filename] = 0
         elif 7 <= id_ <= 14:
             labels[filename] = 1
-        elif id_ == 15:
-            labels[filename] = 2
 
     return image_paths, labels
 
@@ -262,7 +257,9 @@ def _update_paths(image_paths: List[str], coin_type: str, labels_path: str) -> t
     preprocess_func = {
         None: lambda: None,
         "eur": _convert_to_eur,
-        "chf": _convert_to_chf,
+        "heads-tails": _convert_to_heads_tails,
+        "chf-tails": _convert_to_heads_tails,
+        "chf-heads": _convert_to_heads_tails,
         "ccy": _convert_to_ccy
     }
 
@@ -335,7 +332,7 @@ def split_data(
 
 def plot_training(train_losses, valid_losses, train_f1s, valid_f1s):
     """Plot training progress."""
-    best_f1_epoch = valid_f1s.index(max(valid_f1s))
+    best_epoch = valid_losses.index(min(valid_losses))
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
 
@@ -344,7 +341,7 @@ def plot_training(train_losses, valid_losses, train_f1s, valid_f1s):
     ax1.set_title('Training and Validation Loss')
     ax1.set_xlabel('Epoch')
     ax1.set_ylabel('Loss')
-    ax1.axvline(x=best_f1_epoch, color='r', linestyle='--', label='Best Validation F1')
+    ax1.axvline(x=best_epoch, color='r', linestyle='--', label='Best Validation F1')
     ax1.legend()
 
     ax2.plot(train_f1s, label='Training F1')
@@ -352,7 +349,7 @@ def plot_training(train_losses, valid_losses, train_f1s, valid_f1s):
     ax2.set_title('Training and Validation F1 Score')
     ax2.set_xlabel('Epoch')
     ax2.set_ylabel('F1 Score')
-    ax2.axvline(x=best_f1_epoch, color='r', linestyle='--', label='Best Validation F1')
+    ax2.axvline(x=best_epoch, color='r', linestyle='--', label='Best Validation F1')
     ax2.legend()
 
     plt.tight_layout()
@@ -504,6 +501,34 @@ def generate_hough(
     return circles, hough_img
 
 
+def get_bb_coordinates(x, y, r, x_ratio, y_ratio, padding=0):
+    """
+    TODO: update
+
+    Args:
+        x:
+        y:
+        r:
+        x_ratio:
+        y_ratio:
+        padding:
+
+    Returns:
+
+    """
+    x = int(x * x_ratio)
+    y = int(y * y_ratio)
+    r = int(r * max(x_ratio, y_ratio))
+
+    # calculate the region of box
+    x_min = max(0, x - r - padding)
+    y_min = max(0, y - r - padding)
+    x_max = x + r + padding
+    y_max = y + r + padding
+
+    return x_min, y_min, x_max, y_max
+
+
 def get_cropped_image(
         image: np.ndarray, x, y, r, x_ratio, y_ratio, padding: int = 40
 ) -> np.ndarray:
@@ -522,15 +547,9 @@ def get_cropped_image(
     Returns:
         cropped_image (np.ndarray)
     """
-    x = int(x * x_ratio)
-    y = int(y * y_ratio)
-    r = int(r * max(x_ratio, y_ratio))
-
-    # calculate the region of box
-    top_left_x = max(0, x - r - padding)
-    top_left_y = max(0, y - r - padding)
-    bottom_right_x = x + r + padding
-    bottom_right_y = y + r + padding
+    x_min, y_min, x_max, y_max = get_bb_coordinates(
+        x, y, r, x_ratio, y_ratio, padding
+    )
 
     # crop the image
-    return image[top_left_y:bottom_right_y, top_left_x:bottom_right_x]
+    return image[y_min:y_max, x_min:x_max]

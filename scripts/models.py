@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import timm
 import torch
 from torchvision import models
 import segmentation_models_pytorch as smp
@@ -10,48 +11,40 @@ from scripts.training import load_params
 
 
 class CoinClassifier(nn.Module):
-
     task = "classification"
 
     def __init__(
             self,
             num_classes: int = 16,
-            coin_type: str = ""
+            coin_type: str = "",
+            freeze: bool = True
     ):
         super().__init__()
 
         self.coin_type = coin_type
 
-        self.model = models.resnet50(weights='IMAGENET1K_V2')
-
-        num_features = self.model.fc.in_features
-
-        self.model.fc = nn.Identity()
-
-        for param in self.model.parameters():
-            param.requires_grad = False
-
-        self.fc = nn.Sequential(
-            nn.Linear(num_features + 1, 512),  # +1 for the radius
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(512, num_classes)
+        self.model = timm.create_model(
+            'vit_small_patch16_224.augreg_in1k',
+            pretrained=True,
+            num_classes=num_classes
         )
 
-    def forward(self, images, radii):
+        self.backbone_frozen = freeze
 
-        image_features = self.model(images)
-        # add radius to the features
-        combined_features = torch.cat((image_features, radii.unsqueeze(-1)), dim=1)
+        if freeze:
 
-        # Process the combined features through the new fully connected layers
-        output = self.fc(combined_features)
+            for param in self.model.parameters():
+                param.requires_grad = False
 
+            for param in self.model.head.parameters():
+                param.requires_grad = True
+
+    def forward(self, images):
+        output = self.model(images)
         return output
 
 
 class CoinLocalizer(nn.Module):
-
     task = "segmentation"
     coin_type = ""
 
@@ -119,4 +112,4 @@ class HierarchicalClassifier(nn.Module):
             return eur_logits.argmax(dim=-1).cpu().numpy().item() + 7
 
         else:
-            return 15 # OOD class
+            return 15  # OOD class
