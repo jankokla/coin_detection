@@ -2,8 +2,7 @@
 
 ID_TO_CCY = {
     0: 'CHF',
-    1: 'EUR',
-    2: 'OOD'
+    1: 'EUR'
 }
 
 ID_TO_SIDE = {
@@ -13,8 +12,8 @@ ID_TO_SIDE = {
 
 ID_TO_CHF_IMG = {
     0: '5CHF',
-    1: '2/1/0.5CHF',
-    2: '0.2/0.1/0.05CHF'
+    1: '2CHF/1CHF/0.5CHF',
+    2: '0.2CHF/0.1CHF/0.05CHF'
 }
 
 ID_TO_EUR = {
@@ -70,3 +69,21 @@ example_row = [
     '5CHF', '2CHF', '1CHF', '0.5CHF', '0.2CHF', '0.1CHF', '0.05CHF', '2EUR',
     '1EUR', '0.5EUR', '0.2EUR', '0.1EUR', '0.05EUR', '0.02EUR', '0.01EUR', 'OOD'
 ]
+
+size_dict = {
+    '5CHF': None,
+    '2CHF': None,
+    '1CHF': None,
+    '0.5CHF': None,
+    '0.2CHF': None,
+    '0.1CHF': None,
+    '0.05CHF': None,
+    '2EUR': None,
+    '1EUR': None,
+    '0.5EUR': None,
+    '0.2EUR': None,
+    '0.1EUR': None,
+    '0.05EUR': None,
+    '0.02EUR': None,
+    '0.01EUR': None,
+}
