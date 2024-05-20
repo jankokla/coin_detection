@@ -256,7 +256,7 @@ def _convert_to_ccy(image_paths: List[str], labels: dict) -> tuple:
 def _update_paths(image_paths: List[str], coin_type: str, labels_path: str) -> tuple:
     """Fix labels depending on the trainable model."""
     preprocess_func = {
-        None: lambda: None,
+        None: lambda x, y: (x, y),
         "eur": _convert_to_eur,
         "heads-tails": _convert_to_heads_tails,
         "chf-tails": _convert_to_heads_tails,
