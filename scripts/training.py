@@ -386,8 +386,8 @@ def load_updated_params(model, filepath) -> nn.Module:
         filepath (str): The path to the file containing the saved parameters.
     """
 
-    pretrained_dict = model.state_dict()
-    saved_state_dict = torch.load(filepath)
+    device = torch.device('cpu') 
+    saved_state_dict = torch.load(filepath,map_location=device)
 
     # update state dict with saved params
     pretrained_dict.update(saved_state_dict)
