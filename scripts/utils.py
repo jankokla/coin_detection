@@ -4,6 +4,7 @@ import random
 
 import cv2 as cv
 import numpy as np
+import pandas as pd
 import torch.utils.data
 import albumentations as A
 
@@ -568,3 +569,37 @@ def setup_seed(seed: int):
         torch.cuda.manual_seed_all(seed)
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
+
+
+def calculate_f1_score(real_path, pred_path):
+    """
+    Calculate F1 score for the classification task.
+
+    Args:
+        real_path (str): path to the real labels
+        pred_path (str): path to the predicted labels
+
+    Returns:
+        f1_score (float)
+    """
+    true_ground_data = pd.read_csv(real_path)
+    pred_data = pd.read_csv(pred_path)
+
+    # remove id column
+    true_ground_data = true_ground_data.drop(columns='id')
+    pred_data = pred_data.drop(columns='id')
+
+    f1_score = []
+
+    for i in range(len(true_ground_data)):
+        y_true = true_ground_data.iloc[i].values
+        y_pred = pred_data.iloc[i].values
+
+        FPN = np.sum(np.abs(y_true - y_pred))
+        TP = np.sum(np.minimum(y_true, y_pred))
+
+        f1_score.append(2 * TP / (2 * TP + FPN))
+
+    average_f1 = np.mean(f1_score)
+
+    return average_f1
