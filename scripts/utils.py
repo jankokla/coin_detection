@@ -1,5 +1,6 @@
 import json
 import os
+import random
 
 import cv2 as cv
 import numpy as np
@@ -553,3 +554,17 @@ def get_cropped_image(
 
     # crop the image
     return image[y_min:y_max, x_min:x_max]
+
+
+def setup_seed(seed: int):
+    """
+    Create global seed for torch, numpy and cuda.
+
+    :param seed:
+    """
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    random.seed(seed)
+    torch.backends.cudnn.deterministic = True

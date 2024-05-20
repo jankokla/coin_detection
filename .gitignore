@@ -160,10 +160,7 @@ cython_debug/
 .idea/
 
 # Ignore everything in the directory
-data/test
-data/train
-data/ref
-data/segmentation
+data/*
 
 # But do not ignore this specific file
 !data/annotations.json
