@@ -532,7 +532,7 @@ def get_bb_coordinates(x, y, r, x_ratio, y_ratio, padding=0):
 
 
 def get_cropped_image(
-        image: np.ndarray, x, y, r, x_ratio, y_ratio, padding: int = 40
+        image: np.ndarray, x, y, r, x_ratio, y_ratio, padding: int = 5
 ) -> np.ndarray:
     """
     Based on circle info and ratio, crop the coin from the image.
