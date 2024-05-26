@@ -16,7 +16,62 @@ from sklearn.metrics import pairwise_distances
 from sklearn.model_selection import train_test_split
 from matplotlib import image as mpimg, pyplot as plt
 
+from scripts.config import SIZE_DICT
 from scripts.training import get_best_available_device
+
+
+class MergedTrainingDataset(torch.utils.data.Dataset):
+    """
+    TODO: update
+    """
+
+    def __init__(
+            self,
+            image_paths: Union[List[str], np.ndarray],
+            labels: pd.DataFrame = None,
+            transform: A.Compose = None,
+            preprocess: partial = None
+    ):
+
+        self.image_paths = image_paths
+        self.labels = labels
+
+        self.transform = transform
+        self.preprocess = preprocess
+
+    def __getitem__(self, i):
+
+        filepath = self.image_paths[i]
+        image = mpimg.imread(filepath)
+        original_img = image.copy()
+        id_ = self._get_id(filepath)
+
+        if self.labels is not None:
+            labels = torch.tensor(self.labels.loc[id_].tolist())
+        else:
+            labels = torch.empty(16,)
+
+        if self.transform:
+            # NB! This must be done before converting to Pytorch format
+            transformed = self.transform(image=image)
+            image = transformed["image"]
+
+        # apply preprocessing to adjust to encoder
+        if self.preprocess:
+            sample = self.preprocess(image)
+            image = sample["image"]
+
+        # convert to Pytorch format HWC -> CHW
+        image = np.moveaxis(image, -1, 0)
+
+        return torch.tensor(image, dtype=torch.float32), original_img, labels.float(), id_
+
+    def __len__(self):
+        return len(self.image_paths)
+
+    @staticmethod
+    def _get_id(filepath):
+        return filepath.split('/')[-1].split('.')[0]
 
 
 class ClassificationDataset(torch.utils.data.Dataset):
@@ -549,6 +604,13 @@ def get_cropped_image(
     Returns:
         cropped_image (np.ndarray)
     """
+    if not isinstance(image, np.ndarray):
+        image = image.cpu().numpy()
+    if len(image.shape) == 4:
+        image = image.squeeze(0)
+    if image.shape[0] == 3:
+        image = image.transpose(1, 2, 0)
+
     x_min, y_min, x_max, y_max = get_bb_coordinates(
         x, y, r, x_ratio, y_ratio, padding
     )

@@ -71,7 +71,7 @@ example_row = [
     '1EUR', '0.5EUR', '0.2EUR', '0.1EUR', '0.05EUR', '0.02EUR', '0.01EUR', 'OOD'
 ]
 
-size_dict = {
+SIZE_DICT = {
     '5CHF': 31.45,
     '2CHF': 27.40,
     '1CHF': 23.20,
