@@ -158,7 +158,7 @@ class HierarchicalClassifier(nn.Module):
         self.id_to_chf_img = np.vectorize(lambda x: ID_TO_CHF_IMG.get(x, "unknown"))
 
         # specify OOD threshold (if confidence is lower -> OOD)
-        self.ccy_confidence_thresh = nn.Parameter(torch.tensor(0.7))
+        self.ccy_confidence_thresh = nn.Parameter(torch.tensor(0.75))
         self.eur_confidence_thresh = nn.Parameter(torch.tensor(0.6))
 
         # resize and apply imagenet-specific tf for coin classification
