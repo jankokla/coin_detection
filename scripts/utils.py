@@ -16,13 +16,18 @@ from sklearn.metrics import pairwise_distances
 from sklearn.model_selection import train_test_split
 from matplotlib import image as mpimg, pyplot as plt
 
-from scripts.config import SIZE_DICT
 from scripts.training import get_best_available_device
 
 
 class MergedTrainingDataset(torch.utils.data.Dataset):
     """
-    TODO: update
+    Dataset for final inference.
+
+    Args:
+        image_paths (List[str]): list of full paths to images
+        labels (dict): with filename as key and id as value
+        transform (A.Compose): custom transformations from Albumentations
+        preprocess (partial): encoder-specific transforms callable
     """
 
     def __init__(
@@ -76,7 +81,7 @@ class MergedTrainingDataset(torch.utils.data.Dataset):
 
 class ClassificationDataset(torch.utils.data.Dataset):
     """
-    TODO: update
+    Helper dataset for classification models.
 
     Args:
         image_paths (List[str]): list of full paths to images
@@ -217,16 +222,15 @@ def get_segmentation(model: nn.Module, image: torch.Tensor) -> np.ndarray:
 @torch.no_grad()
 def get_class(model: nn.Module, coin, label_mapper) -> tuple:
     """
-    TODO: update
+    Helper inference function for classification models.
 
     Args:
-        model:
-        coin:
-        radius:
-        label_mapper:
+        model (nn.Module): used for inference
+        coin (torch.Tensor): that we want to classify
+        label_mapper (Callable): for id -> coin name
 
     Returns:
-
+        id, label, probability
     """
     probs = model(coin).softmax(dim=-1)
     id_ = probs.argmax(dim=-1).cpu().numpy().item()
@@ -560,18 +564,20 @@ def generate_hough(
 
 def get_bb_coordinates(x, y, r, x_ratio, y_ratio, padding=0):
     """
-    TODO: update
+    Since segmentation model operates on smaller images, recalculate
+        bounding box coordinates on original images using output from
+        Hough circles.
 
     Args:
-        x:
-        y:
-        r:
-        x_ratio:
-        y_ratio:
-        padding:
+        x (float): circle center x-coordinate
+        y (float): circle center x-coordinate
+        r (float): radius
+        x_ratio (float): how much to scale on x-axis
+        y_ratio (float): how much to scale on y-axis
+        padding (int): how much space to add on the edges
 
     Returns:
-
+        x_min, y_min, x_max, y_max
     """
     x = int(x * x_ratio)
     y = int(y * y_ratio)
@@ -587,7 +593,7 @@ def get_bb_coordinates(x, y, r, x_ratio, y_ratio, padding=0):
 
 
 def get_cropped_image(
-        image: np.ndarray, x, y, r, x_ratio, y_ratio, padding: int = 5
+        image: np.ndarray, x, y, r, x_ratio, y_ratio, padding: int = 10
 ) -> np.ndarray:
     """
     Based on circle info and ratio, crop the coin from the image.
@@ -620,48 +626,10 @@ def get_cropped_image(
 
 
 def setup_seed(seed: int):
-    """
-    Create global seed for torch, numpy and cuda.
-
-    :param seed:
-    """
+    """Try to make the whole process as deterministic as possible."""
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
-
-
-def calculate_f1_score(real_path, pred_path):
-    """
-    Calculate F1 score for the classification task.
-
-    Args:
-        real_path (str): path to the real labels
-        pred_path (str): path to the predicted labels
-
-    Returns:
-        f1_score (float)
-    """
-    true_ground_data = pd.read_csv(real_path)
-    pred_data = pd.read_csv(pred_path)
-
-    # remove id column
-    true_ground_data = true_ground_data.drop(columns='id')
-    pred_data = pred_data.drop(columns='id')
-
-    f1_score = []
-
-    for i in range(len(true_ground_data)):
-        y_true = true_ground_data.iloc[i].values
-        y_pred = pred_data.iloc[i].values
-
-        FPN = np.sum(np.abs(y_true - y_pred))
-        TP = np.sum(np.minimum(y_true, y_pred))
-
-        f1_score.append(2 * TP / (2 * TP + FPN))
-
-    average_f1 = np.mean(f1_score)
-
-    return average_f1
