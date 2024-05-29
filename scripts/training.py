@@ -1,4 +1,9 @@
-"""training.py: helper functions for convenient training."""
+"""
+training.py: helper functions for convenient training.
+
+Some of the functions is also used in another project developed by Jan Kokla:
+https://github.com/jankokla/epfl_ml-project-2
+"""
 import os
 import torch
 
@@ -9,7 +14,6 @@ from collections import defaultdict
 from torch.nn import CrossEntropyLoss
 from torch import nn
 from timm.models import VisionTransformer
-from torch.utils.data import DataLoader
 from torcheval.metrics.functional import multiclass_f1_score as f1_eval
 from pathlib import Path
 from tqdm import tqdm
@@ -63,15 +67,15 @@ def train_epoch_cls(
         average f1 score.
 
     Args:
-        model: classification model
-        dataloader:
-        criterion:
-        optimizer:
-        scheduler:
-        epoch:
+        model (nn.Module): classification model
+        dataloader (torch.Dataloader): used for getting images
+        criterion: generally cross-entropy
+        optimizer: generally Adam
+        scheduler: generally cosine annealing
+        epoch: num of epochs to be trained
 
     Returns:
-
+        averages of metrics (loss and f1)
     """
     device = get_best_available_device()
     model.train()
@@ -114,15 +118,19 @@ def train_epoch_seg(
         model, dataloader, criterion, optimizer, scheduler, epoch
 ) -> (float, float):
     """
-    Train the segmentation model and return epoch loss and average f1 score.
+    Train the segmentation model for one epoch and return epoch loss and
+        average f1 score.
 
-    :param model: to be trained (with pretrained encoder)
-    :param dataloader: with images
-    :param criterion: loss function
-    :param optimizer: some SGD implementation
-    :param scheduler: for optimizing learning rate
-    :param epoch: current epoch
-    :return: average loss, average f1 score
+    Args:
+        model (nn.Module): classification model
+        dataloader (torch.Dataloader): used for getting images
+        criterion: generally Dice Loss
+        optimizer: generally Adam
+        scheduler: generally cosine annealing
+        epoch: num of epochs to be trained
+
+    Returns:
+        averages of metrics (loss and f1)
     """
 
     is_cls = isinstance(criterion, CrossEntropyLoss)
@@ -384,13 +392,6 @@ def save_trainable_params(model: nn.Module, filepath: str) -> None:
         filtered_state_dict = model.state_dict()
 
         torch.save(filtered_state_dict, filepath)
-
-
-def get_custom_f1(inputs, targets) -> torch.Tensor:
-    fpn = torch.abs(inputs - targets).sum()
-    tp = torch.min(inputs, targets).sum()
-
-    return 2 * tp / (2 * tp + fpn)
 
 
 def load_params(model, filename: str) -> nn.Module:
