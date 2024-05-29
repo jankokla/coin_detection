@@ -102,11 +102,15 @@ class CoinLocalizer(nn.Module):
 
 class HierarchicalClassifier(nn.Module):
     """
-    TODO: add ASCII tree here
+    Wrapper model that includes all separate classification models:
+        CCY model
+        ├── EUR model
+        └── CHF head-tail model
+            ├── CHF tail model
+            └── CHF head model
     """
 
     def __init__(self):
-
         super(HierarchicalClassifier, self).__init__()
 
         root = Path(__file__).parent.parent
