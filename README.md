@@ -20,3 +20,5 @@ segmentation mask and coin images (extracted from training data), please
 download the full data directory from 
 [here](https://drive.google.com/file/d/1Y5oaoe6CzcHp0vcF1bb3XpaTntPPkXvr/view?usp=sharing) 
 and extract it to the project root.
+
+Now you're good to go and can take a look at the `final_report.ipynb`
