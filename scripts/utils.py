@@ -238,8 +238,8 @@ def get_class(model: nn.Module, coin, label_mapper) -> tuple:
 
 def _get_paths_segmentation(images_path: str) -> Tuple[list, list]:
     # specify image and ground truth full path
-    image_directory = os.path.join(images_path, "images")
-    labels_directory = os.path.join(images_path, "masks")
+    image_directory = os.path.abspath(os.path.join(images_path, "..", "train"))
+    labels_directory = os.path.join(images_path)
 
     # specify absolute paths for all files
     image_paths = [
