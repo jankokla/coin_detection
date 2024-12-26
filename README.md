@@ -21,6 +21,8 @@ several subsystems:
 
 More detailed overview in the notebook `final_report.ipynb`.
 
+![example inference](figures/example_inference.jpg "Example Inference")
+
 ## Setup
 
 ### Installation
