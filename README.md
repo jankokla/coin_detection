@@ -1,7 +1,7 @@
 # Coin Detection
 
 This repository is a group work for EPFL Masters course
-***Image analysis and pattern recognition*** (EE-451) by Hanwen Zhang, Armando
+***Image Analysis and Pattern Recognition*** (EE-451) by Hanwen Zhang, Armando
 Bourgknecht and Jan Kokla.
 
 The aim of the group work was to design a robust ML system to classify coins
