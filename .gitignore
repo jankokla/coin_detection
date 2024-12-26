@@ -161,6 +161,3 @@ cython_debug/
 
 # Ignore everything in the directory
 data/*
-
-# But do not ignore this specific file
-!data/annotations.json
