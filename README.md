@@ -9,7 +9,7 @@ The aim of the group work was to design a robust ML system to classify coins
 (e.g. 1EUR, 2CHF etc) on the image.
 
 Since it was a competition between the groups, the pre-trained NN-s had to be
-trained on ImageNet-1k and the trained model no bigger than 125MB.
+trained on `ImageNet-1k` and the trained model no bigger than 125MB.
 
 While we started with classical image segmentation techniques (Armando Bourgknecht),
 the best results were achieved by a mixture of experts model (MoE), which consists of
@@ -26,7 +26,7 @@ More detailed overview in the notebook `final_report.ipynb`.
 ### Installation
 
 First, create the environment. For better reproducibility
-we're limiting the Python version to 3.9.
+we're limiting the Python version to `Python 3.9`.
 
 ```bash
 python3.9 -m venv .venv
